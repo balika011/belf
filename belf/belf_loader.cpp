@@ -410,6 +410,10 @@ void idaapi elf_load_file(linput_t *li, ushort neflags, const char *fileformatna
 		}
 	}
 
+	inf.start_ip = get_imagebase() + reader.get_header().e_entry;
+	inf.start_cs = getseg(inf.start_ip)->sel;
+	msg("entry point: 0x%x\n", reader.get_header().e_entry);
+
 	reader_t::dyninfo_tags_t dyninfo_tags;
 	dynamic_info_t dyninfo;
 	if (!reader.read_dynamic_info_tags(&dyninfo_tags, reader.pheaders.get_dynamic_linking_tables_info()) ||

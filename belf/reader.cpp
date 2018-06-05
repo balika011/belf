@@ -24,6 +24,7 @@
 #include "../idaldr.h"
 #include "../../module/arm/notify_codes.hpp"
 #endif
+#include "utils.h"
 
 //----------------------------------------------------------------------------
 ssize_t reader_t::prepare_error_string(
@@ -1669,7 +1670,7 @@ bool reader_t::parse_dynamic_info(
             : dyn->d_tag == DT_SCE_RELA      ? DIT_RELA // PS4
             : dyn->d_tag == DT_JMPREL        ? DIT_PLT
             : dyn->d_tag == DT_HASH          ? DIT_HASH
-            : dyn->d_tag == DT_SCE_HASH      ? DIT_HASH
+            : dyn->d_tag == DT_SCE_HASH      ? DIT_HASH // PS4
             : dyn->d_tag == DT_GNU_HASH      ? DIT_GNU_HASH
             : dyn->d_tag == DT_PREINIT_ARRAY ? DIT_PREINIT_ARRAY
             : dyn->d_tag == DT_INIT_ARRAY    ? DIT_INIT_ARRAY
@@ -1711,6 +1712,7 @@ bool reader_t::parse_dynamic_info(
             : dyn->d_tag == DT_SCE_SYMENT ? DIT_SYMTAB // PS4
             : dyn->d_tag == DT_RELENT     ? DIT_REL
             : dyn->d_tag == DT_RELAENT    ? DIT_RELA
+            : dyn->d_tag == DT_SCE_RELAENT? DIT_RELA // PS4
             :                               DIT_TYPE_COUNT;
     if ( di_type != DIT_TYPE_COUNT )
     {
@@ -1745,6 +1747,7 @@ bool reader_t::parse_dynamic_info(
         continue;
 
       default:
+		  msg("UNHANDELD: tag: %s \t un: %016llx\n", dyntag_to_string(dyn->d_tag).c_str(), dyn->d_un);
         continue;
 
       case DT_NULL:

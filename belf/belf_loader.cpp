@@ -267,6 +267,32 @@ void load_rela(reader_t &reader, elf_phdr_t &dyndata, dynamic_info_t::entry_t &r
 	delete[] rela;
 }
 
+void createSegment(const char *name, uint32 flags, uchar bitness, uchar type, ea_t start, ea_t end)
+{
+	static sel_t g_sel = 0;
+
+	segment_t s;
+	memset(&s, 0, sizeof(segment_t));
+	s.color = -1;
+	s.align = 1;
+	s.comb = scPub;
+	s.perm = 0;
+	if (flags & PF_R)
+		s.perm |= SEGPERM_READ;
+	if (flags & PF_W)
+		s.perm |= SEGPERM_WRITE;
+	if (flags & PF_X)
+		s.perm |= SEGPERM_EXEC;
+	s.bitness = bitness;
+	s.sel = g_sel++;
+	s.type = type;
+	s.start_ea = start;
+	s.end_ea = end;
+
+	if (!add_segm_ex(&s, name, 0, ADDSEG_SPARSE))
+		loader_failure("Could not create segment '%s' at %a..%a", name, s.start_ea, s.end_ea, s.start_ea);
+}
+
 void idaapi elf_load_file(linput_t *li, ushort neflags, const char *fileformatname)
 {
 #ifdef _DEBUG
@@ -312,85 +338,25 @@ void idaapi elf_load_file(linput_t *li, ushort neflags, const char *fileformatna
 		case PT_LOAD:
 		{
 			const char *name = phdr->p_flags & PF_X ? "CODE" : "DATA";
+			uchar type = phdr->p_flags & PF_X ? SEG_CODE : SEG_DATA;
 
-			segment_t s;
-			memset(&s, 0, sizeof(segment_t));
-			s.color = -1;
-			s.align = 1;
-			s.comb = scPub;
-			s.perm = 0;
-			if (phdr->p_flags & PF_R)
-				s.perm |= SEGPERM_READ;
-			if (phdr->p_flags & PF_W)
-				s.perm |= SEGPERM_WRITE;
-			if (phdr->p_flags & PF_X)
-				s.perm |= SEGPERM_EXEC;
-			s.bitness = reader.get_seg_bitness();
-			s.sel = 0; //?
-			s.type = phdr->p_flags & PF_X ? SEG_CODE : SEG_DATA;
-			s.start_ea = phdr->p_vaddr;
-			s.end_ea = phdr->p_vaddr + phdr->p_memsz;
+			createSegment(name, phdr->p_flags, reader.get_seg_bitness(), type, phdr->p_vaddr, phdr->p_vaddr + phdr->p_memsz);
 
 			file2base(li, phdr->p_offset, phdr->p_vaddr, phdr->p_vaddr + phdr->p_filesz, FILEREG_PATCHABLE);
-
-			if (!add_segm_ex(&s, name, 0, ADDSEG_SPARSE))
-				loader_failure("Could not create segment '%s' at %a..%a", name, s.start_ea, s.end_ea, s.start_ea);
 			break;
 		}
 		case PT_SCE_RELRO:
 		{
-			const char *name = ".relro";
-
-			segment_t s;
-			memset(&s, 0, sizeof(segment_t));
-			s.color = -1;
-			s.align = 1;
-			s.comb = scPub;
-			s.perm = 0;
-			if (phdr->p_flags & PF_R)
-				s.perm |= SEGPERM_READ;
-			if (phdr->p_flags & PF_W)
-				s.perm |= SEGPERM_WRITE;
-			if (phdr->p_flags & PF_X)
-				s.perm |= SEGPERM_EXEC;
-			s.bitness = reader.get_seg_bitness();
-			s.sel = 0; //?
-			s.type = SEG_XTRN;
-			s.start_ea = phdr->p_vaddr;
-			s.end_ea = phdr->p_vaddr + phdr->p_memsz;
+			createSegment(".relro", phdr->p_flags, reader.get_seg_bitness(), SEG_XTRN, phdr->p_vaddr, phdr->p_vaddr + phdr->p_memsz);
 
 			file2base(li, phdr->p_offset, phdr->p_vaddr, phdr->p_vaddr + phdr->p_filesz, FILEREG_PATCHABLE);
-
-			if (!add_segm_ex(&s, name, 0, ADDSEG_SPARSE))
-				loader_failure("Could not create segment '%s' at %a..%a", name, s.start_ea, s.end_ea, s.start_ea);
 			break;
 		}
 		case PT_GNU_EH_FRAME:
 		{
-			const char *name = ".eh_frame";
-
-			segment_t s;
-			memset(&s, 0, sizeof(segment_t));
-			s.color = -1;
-			s.align = 1;
-			s.comb = scPub;
-			s.perm = 0;
-			if (phdr->p_flags & PF_R)
-				s.perm |= SEGPERM_READ;
-			if (phdr->p_flags & PF_W)
-				s.perm |= SEGPERM_WRITE;
-			if (phdr->p_flags & PF_X)
-				s.perm |= SEGPERM_EXEC;
-			s.bitness = reader.get_seg_bitness();
-			s.sel = 0; //?
-			s.type = SEG_DATA;
-			s.start_ea = phdr->p_vaddr;
-			s.end_ea = phdr->p_vaddr + phdr->p_memsz;
+			createSegment(".eh_frame", phdr->p_flags, reader.get_seg_bitness(), SEG_DATA, phdr->p_vaddr, phdr->p_vaddr + phdr->p_memsz);
 
 			file2base(li, phdr->p_offset, phdr->p_vaddr, phdr->p_vaddr + phdr->p_filesz, FILEREG_PATCHABLE);
-
-			if (!add_segm_ex(&s, name, 0, ADDSEG_SPARSE))
-				loader_failure("Could not create segment '%s' at %a..%a", name, s.start_ea, s.end_ea, s.start_ea);
 			break;
 		}
 		case PT_SCE_DYNLIBDATA:
@@ -451,10 +417,10 @@ void idaapi elf_load_file(linput_t *li, ushort neflags, const char *fileformatna
 		}
 		case DT_SCE_IMPORT_LIB:
 		case DT_SCE_EXPORT_LIB:
-			msg("PORT: tag: %08x \t un: %08x\n", dyn->d_tag, dyndata.p_offset + dyn->d_un); break;
+			msg("PORT: tag: %08x \t un: %08llx\n", dyn->d_tag, dyndata.p_offset + dyn->d_un); break;
 		case DT_SCE_IMPORT_LIB_ATTR:
 		case DT_SCE_EXPORT_LIB_ATTR:
-			msg("PORT: tag: %08x \t un: %08x\n", dyn->d_tag, dyn->d_un); break;
+			msg("PORT: tag: %08x \t un: %08llx\n", dyn->d_tag, dyn->d_un); break;
 		case DT_SCE_MODULE_INFO:
 			dynlib.setSelfModuleStrIndex(dyn->d_un & 0xFFFFFFFF);
 		}
